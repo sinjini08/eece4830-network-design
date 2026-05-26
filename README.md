@@ -9,7 +9,7 @@ This repo has my implementation for the network design project. Phase 1 covers a
 | Sinjini Bhattacharjee | sinjini.bx@gmail.com |
 
 ## Demo Video
-Private YouTube link: to be submitted via Canvas
+Private YouTube link: (https://youtu.be/8d3UtI3cKqU)
 
 ---
 
