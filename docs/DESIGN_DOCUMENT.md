@@ -21,7 +21,7 @@ Phase 1 has two parts. In part 1a I implement a basic UDP client and server wher
 
 Screen recording showing the required scenarios.
 
-- **Private YouTube link:** *(will be filled later)*
+- **Private YouTube link:** (https://youtu.be/8d3UtI3cKqU)
 
 ### 1.2 Required Demo Scenarios
 
