@@ -1,17 +1,17 @@
-# Network Design Project – Phase Proposal & Design Document (Phase 1 of 5)
+# Network Design Project – Phase Proposal & Design Document (Phase 2 of 5)
 
 **Team Name:** Solo  
 **Members:** Sinjini Bhattacharjee, sinjini.bx@gmail.com  
 **GitHub Repo URL:** https://github.com/sinjini08/eece4830-network-design (username: sinjini08)  
-**Phase:** 1  
-**Submission Date:** May 2026  
+**Phase:** 2  
+**Submission Date:** June 2026  
 **Version:** v1
 
 ---
 
 ## 0) Executive Summary
 
-Phase 1 has two parts. In part 1a I implement a basic UDP client and server where the client sends a message like "HELLO" and the server sends it back. In part 1b I implement RDT 1.0 file transfer over UDP. The sender reads a BMP file, breaks it into 1024 byte chunks, and sends one chunk at a time. The receiver writes each chunk to a file and sends an ACK back. Since RDT 1.0 assumes the channel is perfect there is no error handling needed. The transfer is done when the sender sends an end packet with no data. I will verify the transfer worked by comparing the MD5 hash of the original and received files.
+Phase 2 builds on Phase 1 by upgrading to RDT 2.2. The main new things are a checksum to detect bit errors, alternating sequence numbers (0 and 1) to catch duplicates, and retransmission when a bad ACK comes back. RDT 2.2 is NAK-free so the receiver only ever sends ACKs. I test three scenarios: no errors, ACK errors injected at the sender side, and data errors injected at the receiver side. I also measure how long each transfer takes across different error rates (0% to 95%) and plot the results.
 
 ---
 
@@ -19,20 +19,23 @@ Phase 1 has two parts. In part 1a I implement a basic UDP client and server wher
 
 ### 1.1 Demo Deliverable
 
-Screen recording showing the required scenarios.
+Screen recording showing all three scenarios and the plot.
 
-- **Private YouTube link:** (https://youtu.be/8d3UtI3cKqU)
+- **Private YouTube link:** (to be filled in at submission)
 
 ### 1.2 Required Demo Scenarios
 
-| Scenario | What will be configured | Expected observable behavior | What we will see in the video |
+| Scenario | What will be configured | Expected behavior | What we will see |
 |---|---|---|---|
-| 1 | UDP client sends "HELLO" to server, both on same machine different ports | Server prints the message and echoes it back | Two terminals showing both sides |
-| 2 | Sender sends a BMP file to receiver over UDP | Receiver saves the file and hashes match | Two terminals showing packets and final hash check |
+| Option 1 | No errors | Clean transfer, hashes match | Terminal showing transfer complete |
+| Option 2 | ACK errors at sender (--ack-error-rate 0.3) | Sender detects bad ACKs and retransmits | Terminal showing retransmissions |
+| Option 3 | Data errors at receiver (--data-error-rate 0.3) | Receiver detects corrupt data, sender retransmits | Terminal showing retransmissions |
 
 ### 1.3 Required Figures / Plots
 
-N/A
+| Figure | X-axis | Y-axis | Sweep range | Output file |
+|---|---|---|---|---|
+| Completion time vs error rate | Error rate (%) | Time (seconds) | 0% to 95%, step 5% | results/phase2_plot.png |
 
 ---
 
@@ -40,54 +43,60 @@ N/A
 
 ### 2.1 Scope
 
-- **New behaviors added:** UDP echo (1a), RDT 1.0 file transfer (1b)
-- **Out of scope:** checksums, retransmission, pipelining (those are later phases)
+- **New stuff added:** checksum, alternating seq bits, retransmission, error injection flags, timing, experiment script, plot script
+- **Same as Phase 1:** UDP sockets, 1024-byte packets, file reassembly
+- **Out of scope:** packet loss and timeouts (Phase 3), pipelining (Phase 5)
 
 ### 2.2 Acceptance Criteria
 
-- [ ] Server runs on port 9000, client on port 9001
-- [ ] Client sends "HELLO" and gets it back
-- [ ] Sender splits file into 1024 byte packets
-- [ ] Sender waits for ACK before sending next packet
-- [ ] Receiver writes chunks in order to output file
-- [ ] MD5 hash of received file matches original
-- [ ] README has commands to run both parts
+- [ ] Checksum computed over full packet
+- [ ] Seq bit alternates 0 and 1 for each new packet
+- [ ] Sender retransmits if ACK is corrupt or wrong seq
+- [ ] Receiver sends duplicate ACK if data is corrupt or wrong seq
+- [ ] All 3 options work and files match after transfer
+- [ ] Plot generated with correct axes and 3 lines
 
 ### 2.3 Work Breakdown
 
-Individual work by Sinjini Bhattacharjee.
+Solo - all work by Sinjini Bhattacharjee.
 
 ---
 
 ## 3) Architecture + State Diagrams
 
-### 3.1 State Diagrams
+### 3.1 RDT 2.2 State Diagrams
 
-**Phase 1a:**
+Sender:
 
-Client sends "HELLO" --> Server receives and prints it --> Server echoes back --> Client prints echo
+Wait for call 0 -> send pkt seq=0 -> Wait for ACK 0
+  if ACK corrupt or wrong seq: retransmit
+  if ACK good seq=0: go to Wait for call 1
 
-**Phase 1b:**
+Wait for call 1 -> send pkt seq=1 -> Wait for ACK 1
+  if ACK corrupt or wrong seq: retransmit
+  if ACK good seq=1: go to Wait for call 0
 
-Sender reads file --> splits into chunks --> sends packet --> waits for ACK --> sends next packet --> sends END
-Receiver waits --> gets packet --> writes to file --> sends ACK --> waits again --> gets END --> closes file
+Receiver:
+
+Wait for 0:
+  if corrupt or seq!=0: send last ACK
+  if good seq=0: write data, send ACK(0), go to Wait for 1
+
+Wait for 1:
+  if corrupt or seq!=1: send last ACK
+  if good seq=1: write data, send ACK(1), go to Wait for 0
 
 ### 3.2 Component Responsibilities
 
-- **udp_server.py** – listens on port 9000, receives message, sends it back
-- **udp_client.py** – sends "HELLO" to server, prints the reply
-- **sender.py** – reads file, sends packets one at a time, waits for ACK each time
-- **receiver.py** – receives packets, writes to file, sends ACKs
+- sender.py - sends RDT 2.2 packets, injects ACK errors, retransmits, measures time
+- receiver.py - checks checksum and seq, writes to file, sends ACKs, injects data errors
+- scripts/run_experiments.py - runs all 3 options at all error rates, saves CSV
+- scripts/plot_results.py - reads CSV and generates plot
 
 ### 3.3 Message Flow
 
-Phase 1a:
-udp_client (port 9001) --> UDP --> udp_server (port 9000)
-                       <-- echo <--
-
-Phase 1b:
-[input file] --> sender --> UDP --> receiver --> [output file]
-                       <-- ACK <--
+[file] -> sender -> UDP -> receiver -> [output file]
+       <- ACK (with possible injected errors) <-
 
 ---
 
@@ -95,20 +104,20 @@ Phase 1b:
 
 ### 4.1 Packet Types
 
-- Data packet – has a header and file chunk
-- ACK packet – just 4 bytes sent back to the sender
-- End packet – header with 0 bytes of payload to signal done
+- Data packet: header + file chunk
+- ACK packet: header with 0-byte payload
+- End packet: seq_bit=2, no payload
 
 ### 4.2 Header Fields
 
 | Field | Size | Type | Description |
 |---|---:|---|---|
-| seq_num | 4 bytes | unsigned int | which packet this is |
-| length | 4 bytes | unsigned int | how many bytes of data |
-| payload | up to 1024 bytes | bytes | the file chunk |
+| seq_bit | 1 byte | unsigned int | 0 or 1 (alternating), 2 = END |
+| length | 4 bytes | unsigned int | payload size in bytes |
+| checksum | 2 bytes | unsigned int | sum of all bytes mod 65536 |
+| payload | up to 1024 bytes | bytes | file chunk |
 
-Header is 8 bytes total. Encoded with struct.pack("!II", seq_num, length).
-ACK is just struct.pack("!I", seq_num).
+Header is 7 bytes. Encoded with struct.pack("!BIH", seq_bit, length, checksum).
 
 ---
 
@@ -116,17 +125,17 @@ ACK is just struct.pack("!I", seq_num).
 
 ### 5.1 Key Data Structures
 
-- Sender reads the whole file into bytes and slices it into a list of chunks
-- Receiver opens the output file and writes each chunk as it arrives
+- Sender: list of chunks, current seq_bit (0 or 1)
+- Receiver: expected_seq (starts at 0), last_ack (last ACK sent, used for retransmits)
 
 ### 5.2 Module Map
 
-src/udp_client.py
-src/udp_server.py
 src/sender.py
 src/receiver.py
-
-No shared module, kept everything separate to keep it simple.
+scripts/run_experiments.py
+scripts/plot_results.py
+results/phase2_times.csv
+results/phase2_plot.png
 
 ---
 
@@ -134,42 +143,44 @@ No shared module, kept everything separate to keep it simple.
 
 ### 6.1 Sender Behavior
 
-1. Read the file
-2. Split into 1024 byte chunks
+1. Read file, split into chunks
+2. seq_bit = 0
 3. For each chunk: send packet, wait for ACK
-4. Send END packet when done
-
-Pseudocode:
-read file
-chunks = split into 1024 byte pieces
-for each chunk:
-    send packet(seq, chunk)
-    wait for ACK
-send END packet
+4. Possibly corrupt the ACK if ack-error-rate > 0
+5. If ACK corrupt or wrong seq: retransmit
+6. If ACK good: flip seq_bit, move to next chunk
+7. Send END packet when done
 
 ### 6.2 Receiver Behavior
 
-1. Listen for packets
-2. If data: write to file, send ACK
-3. If END: close file and stop
+1. expected_seq = 0
+2. Receive packet
+3. If seq_bit == 2: END, stop
+4. Possibly corrupt the packet if data-error-rate > 0
+5. If corrupt or wrong seq: send last ACK
+6. If good: write payload, send ACK(seq_bit), flip expected_seq
 
-Pseudocode:
-open output file
-loop:
-    receive packet
-    if length == 0: stop
-    write payload to file
-    send ACK
+### 6.3 Error Injection
 
-### 6.3 Error/Loss Injection
-
-N/A – RDT 1.0 assumes a perfect channel.
+- Option 2: sender corrupts ACK with probability ack-error-rate by flipping a random byte
+- Option 3: receiver corrupts data packet with probability data-error-rate by flipping a random byte
+- Seed set with --seed for reproducibility
 
 ---
 
 ## 7) Experiments + Metrics Plan
 
-N/A
+### 7.1 Measurement
+
+- Start timer just before first packet is sent
+- Stop timer after END packet is sent
+- 5 runs per rate per option, averaged
+- Logging disabled during timing runs
+
+### 7.2 Output
+
+- CSV: results/phase2_times.csv (columns: option, rate, avg_time)
+- Plot: results/phase2_plot.png
 
 ---
 
@@ -179,13 +190,15 @@ N/A
 
 | Edge case | Why it matters | Expected behavior |
 |---|---|---|
-| Last packet smaller than 1024 bytes | File size is not always a multiple of 1024 | Receiver uses length field to write the right number of bytes |
-| END packet | Signals transfer is done | Receiver closes file and exits loop |
+| ACK corrupt on very first packet | No previous ACK to fall back on | Retransmit seq=0 |
+| 95% error rate | Almost all packets need retransmit | Transfer completes but slowly |
+| Last packet smaller than 1024 bytes | File not multiple of chunk size | Receiver uses length field |
 
 ### 8.2 Tests
 
-- Send a BMP file and compare MD5 hashes of original and received file
-- Check the number of packets printed matches what is expected
+- Option 1 md5 hash check
+- Option 2 at 50% error rate, verify file still correct
+- Option 3 at 50% error rate, verify file still correct
 
 ---
 
@@ -199,8 +212,14 @@ src/
 docs/
     DESIGN_DOCUMENT.md
 data/
-    sample.bmp
+    480-360-sample.bmp
+scripts/
+    run_experiments.py
+    plot_results.py
 results/
+    phase2_times.csv
+    phase2_plot.png
+contribution.txt
 README.md
 
 ---
@@ -209,14 +228,15 @@ README.md
 
 ### 10.1 Task Ownership
 
-| Task | Owner | Target date | Definition of done |
-|---|---|---|---|
-| Phase 1a | Sinjini Bhattacharjee | Week 1 | Echo works |
-| Phase 1b | Sinjini Bhattacharjee | Week 1 | File hash matches |
-| README | Sinjini Bhattacharjee | Week 1 | TA can run it |
+| Task | Owner | Done when |
+|---|---|---|
+| sender.py RDT 2.2 | Sinjini Bhattacharjee | All 3 options work |
+| receiver.py RDT 2.2 | Sinjini Bhattacharjee | Checksum and seq correct |
+| Experiment + plot scripts | Sinjini Bhattacharjee | Plot generated |
+| README + design doc | Sinjini Bhattacharjee | TA can run everything |
 
 ### 10.2 Milestones
 
-- Milestone 1: Phase 1a working
-- Milestone 2: Phase 1b working, hash verified
-- Milestone 3: Repo clean, submitted on Canvas
+- Milestone 1: RDT 2.2 working for Option 1
+- Milestone 2: Options 2 and 3 working
+- Milestone 3: Plots done, submitted on Canvas
