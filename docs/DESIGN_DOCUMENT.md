@@ -282,4 +282,4 @@ README.md
 - Milestone 1: RDT 3.0 working for Option 1 (timer added but no errors/loss)
 - Milestone 2: Options 2 and 3 working (bit errors, same as Phase 2)
 - Milestone 3: Options 4 and 5 working (packet loss + timer)
-- Milestone 4: Plots done, submitted on Canvas
+- Milestone 4: Plots generated, evreything submitted.
