@@ -38,6 +38,7 @@ def main():
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--out", type=str, required=True)
     parser.add_argument("--data-error-rate", type=float, default=0.0)
+    parser.add_argument("--data-loss-rate", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--log-level", type=str, default="info")
     args = parser.parse_args()
@@ -67,6 +68,11 @@ def main():
             if verbose:
                 print("Received END packet. Done.")
             break
+
+        if args.data_loss_rate > 0 and random.random() < args.data_loss_rate:
+            if verbose:
+                print(f"Dropped DATA packet seq_bit={seq_bit}")
+            continue
 
         if args.data_error_rate > 0 and random.random() < args.data_error_rate:
             raw = corrupt_packet(raw)
