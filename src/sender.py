@@ -6,7 +6,7 @@ import time
 
 CHUNK_SIZE = 1024
 HEADER_SIZE = 7
-TIMEOUT = 1.0
+TIMEOUT = 0.5
 
 def calc_checksum(data):
     return sum(data) % 65536
