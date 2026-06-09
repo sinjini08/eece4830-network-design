@@ -5,7 +5,8 @@ import random
 import time
 
 CHUNK_SIZE = 1024
-HEADER_SIZE = 7  # 1 (seq_bit) + 4 (length) + 2 (checksum)
+HEADER_SIZE = 7
+TIMEOUT = 1.0
 
 def calc_checksum(data):
     return sum(data) % 65536
@@ -40,8 +41,10 @@ def main():
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--file", type=str, required=True)
     parser.add_argument("--ack-error-rate", type=float, default=0.0)
+    parser.add_argument("--ack-loss-rate", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--log-level", type=str, default="info")
+    parser.add_argument("--timeout", type=float, default=TIMEOUT)
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -61,6 +64,7 @@ def main():
         print("Total packets:", len(chunks))
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(args.timeout)
     receiver = (args.host, args.port)
 
     start_time = time.time()
@@ -74,21 +78,32 @@ def main():
             print(f"Sent packet {i} seq_bit={seq_bit}")
 
         while True:
-            ack, _ = sock.recvfrom(16)
+            try:
+                ack, _ = sock.recvfrom(16)
 
-            if args.ack_error_rate > 0 and random.random() < args.ack_error_rate:
-                ack = corrupt_packet(ack)
-                if verbose:
-                    print(f"Injected error into ACK for packet {i}")
+                if args.ack_loss_rate > 0 and random.random() < args.ack_loss_rate:
+                    if verbose:
+                        print(f"Dropped ACK for packet {i}")
+                    raise socket.timeout
 
-            if is_corrupt(ack) or get_seq_bit(ack) != seq_bit:
+                if args.ack_error_rate > 0 and random.random() < args.ack_error_rate:
+                    ack = corrupt_packet(ack)
+                    if verbose:
+                        print(f"Injected error into ACK for packet {i}")
+
+                if is_corrupt(ack) or get_seq_bit(ack) != seq_bit:
+                    if verbose:
+                        print(f"Bad ACK for packet {i}, retransmitting")
+                    sock.sendto(packet, receiver)
+                else:
+                    if verbose:
+                        print(f"Good ACK for packet {i}")
+                    break
+
+            except socket.timeout:
                 if verbose:
-                    print(f"Bad ACK for packet {i}, retransmitting")
+                    print(f"Timeout waiting for ACK for packet {i}, retransmitting")
                 sock.sendto(packet, receiver)
-            else:
-                if verbose:
-                    print(f"Good ACK for packet {i}")
-                break
 
         seq_bit = 1 - seq_bit
         i += 1
