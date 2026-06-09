@@ -1,12 +1,14 @@
 import csv
 import matplotlib.pyplot as plt
 
-CSV_IN = "results/phase2_times.csv"
-PLOT_OUT = "results/phase2_plot.png"
+CSV_IN = "results/phase3_times.csv"
+PLOT_OUT = "results/phase3_plot.png"
 
 rates1, times1 = [], []
 rates2, times2 = [], []
 rates3, times3 = [], []
+rates4, times4 = [], []
+rates5, times5 = [], []
 
 with open(CSV_IN, "r") as f:
     reader = csv.DictReader(f)
@@ -20,18 +22,26 @@ with open(CSV_IN, "r") as f:
         elif option == 2:
             rates2.append(rate)
             times2.append(avg)
-        else:
+        elif option == 3:
             rates3.append(rate)
             times3.append(avg)
+        elif option == 4:
+            rates4.append(rate)
+            times4.append(avg)
+        else:
+            rates5.append(rate)
+            times5.append(avg)
 
 plt.figure(figsize=(10, 6))
-plt.plot(rates1, times1, marker="o", label="Option 1 - No errors")
+plt.plot(rates1, times1, marker="o", label="Option 1 - No loss/errors")
 plt.plot(rates2, times2, marker="s", label="Option 2 - ACK bit-error")
 plt.plot(rates3, times3, marker="^", label="Option 3 - Data bit-error")
+plt.plot(rates4, times4, marker="D", label="Option 4 - ACK loss")
+plt.plot(rates5, times5, marker="x", label="Option 5 - Data loss")
 
-plt.xlabel("Error Rate (%)")
+plt.xlabel("Error/Loss Rate (%)")
 plt.ylabel("Completion Time (seconds)")
-plt.title("RDT 2.2 Completion Time vs Error Rate")
+plt.title("RDT 3.0 Completion Time vs Error/Loss Rate")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
