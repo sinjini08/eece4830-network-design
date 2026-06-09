@@ -4,32 +4,38 @@ import csv
 import os
 import sys
 
-# error rates to test
 rates = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95]
 NUM_RUNS = 5
 FILE = "data/480-360-sample.bmp"
 PORT = 9000
 OUT_FILE = "results/received_temp.bmp"
-CSV_OUT = "results/phase2_times.csv"
+CSV_OUT = "results/phase3_times.csv"
 
 def run_once(option, error_rate, seed):
     rate = error_rate / 100.0
 
+    ack_err = 0.0
+    data_err = 0.0
+    ack_loss = 0.0
+    data_loss = 0.0
+
     if option == 1:
-        ack_err = 0.0
-        data_err = 0.0
+        pass
     elif option == 2:
         ack_err = rate
-        data_err = 0.0
-    else:
-        ack_err = 0.0
+    elif option == 3:
         data_err = rate
+    elif option == 4:
+        ack_loss = rate
+    elif option == 5:
+        data_loss = rate
 
     receiver_cmd = [
         sys.executable, "src/receiver.py",
         "--port", str(PORT),
         "--out", OUT_FILE,
         "--data-error-rate", str(data_err),
+        "--data-loss-rate", str(data_loss),
         "--seed", str(seed),
         "--log-level", "error"
     ]
@@ -39,6 +45,7 @@ def run_once(option, error_rate, seed):
         "--port", str(PORT),
         "--file", FILE,
         "--ack-error-rate", str(ack_err),
+        "--ack-loss-rate", str(ack_loss),
         "--seed", str(seed),
         "--log-level", "error"
     ]
@@ -51,9 +58,8 @@ def run_once(option, error_rate, seed):
     sender_out, _ = sender_proc.communicate()
     elapsed = time.time() - start
 
-    receiver_proc.wait(timeout=30)
+    receiver_proc.wait(timeout=120)
 
-    # try to parse time from sender output
     for line in sender_out.decode().splitlines():
         if "Transfer done in" in line:
             try:
@@ -67,7 +73,7 @@ os.makedirs("results", exist_ok=True)
 
 rows = []
 
-for option in [1, 2, 3]:
+for option in [1, 2, 3, 4, 5]:
     print(f"\nRunning Option {option}...")
     for rate in rates:
         run_times = []
