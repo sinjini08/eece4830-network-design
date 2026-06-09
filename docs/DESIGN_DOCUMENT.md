@@ -150,7 +150,7 @@ Header is 7 bytes. Encoded with struct.pack("!BIH", seq_bit, length, checksum).
 
 ### 5.1 Key Data Structures
 
-- Sender: list of chunks, current seq_bit (0 or 1), socket timeout set to 1.0 second
+- Sender: list of chunks, current seq_bit (0 or 1), socket timeout set to 0.5 seconds
 - Receiver: expected_seq (starts at 0), last_ack (last ACK sent, used for retransmits)
 
 ### 5.2 Module Map
@@ -170,7 +170,7 @@ results/phase3_plot.png
 
 1. Read file, split into chunks
 2. seq_bit = 0
-3. sock.settimeout(1.0)
+3. sock.settimeout(0.5)
 4. For each chunk: send packet, wait for ACK
 5. If socket.timeout fires: retransmit
 6. If ack-loss-rate > 0 and random drop: raise timeout manually (Option 4)
@@ -202,7 +202,7 @@ Seed set with --seed for reproducibility.
 
 ### 6.4 Timeout Value
 
-Default timeout is 1.0 second. This can be changed with --timeout. At high loss rates many timeouts will fire which makes transfers slow - this is expected behavior for a non-pipelined protocol.
+Default timeout is 0.5 seconds. At high loss rates many timeouts will fire which makes transfers slow - this is expected behavior for a non-pipelined protocol.
 
 ---
 
@@ -212,7 +212,7 @@ Default timeout is 1.0 second. This can be changed with --timeout. At high loss 
 
 - Start timer just before first packet is sent
 - Stop timer after END packet is sent
-- 5 runs per rate per option, averaged
+- 3 runs per rate per option, averaged
 - Logging disabled during timing runs (--log-level error)
 - Receiver timeout set to 120 seconds for high loss rate runs
 
@@ -282,4 +282,4 @@ README.md
 - Milestone 1: RDT 3.0 working for Option 1 (timer added but no errors/loss)
 - Milestone 2: Options 2 and 3 working (bit errors, same as Phase 2)
 - Milestone 3: Options 4 and 5 working (packet loss + timer)
-- Milestone 4: Plots generated, evreything submitted.
+- Milestone 4: Plots generated, everything submitted
