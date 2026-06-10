@@ -150,7 +150,7 @@ Header is 7 bytes. Encoded with struct.pack("!BIH", seq_bit, length, checksum).
 
 ### 5.1 Key Data Structures
 
-- Sender: list of chunks, current seq_bit (0 or 1), socket timeout set to 0.2 seconds
+- Sender: list of chunks, current seq_bit (0 or 1), socket timeout set to 0.1 seconds
 - Receiver: expected_seq (starts at 0), last_ack (last ACK sent, used for retransmits)
 
 ### 5.2 Module Map
@@ -170,7 +170,7 @@ results/phase3_plot.png
 
 1. Read file, split into chunks
 2. seq_bit = 0
-3. sock.settimeout(0.2)
+3. sock.settimeout(0.1)
 4. For each chunk: send packet, wait for ACK
 5. If socket.timeout fires: retransmit
 6. If ack-loss-rate > 0 and random drop: raise timeout manually (Option 4)
@@ -202,7 +202,7 @@ Seed set with --seed for reproducibility.
 
 ### 6.4 Timeout Value
 
-Default timeout is 0.2 seconds. At high loss rates many timeouts will fire which makes transfers slow - this is expected behavior for a non-pipelined protocol.
+Default timeout is 0.1 seconds. At high loss rates many timeouts will fire which makes transfers slow - this is expected behavior for a non-pipelined protocol.
 
 ---
 
@@ -212,7 +212,7 @@ Default timeout is 0.2 seconds. At high loss rates many timeouts will fire which
 
 - Start timer just before first packet is sent
 - Stop timer after END packet is sent
-- 3 runs per rate per option, averaged
+- 5 runs per rate per option, averaged
 - Logging disabled during timing runs (--log-level error)
 - Receiver timeout set to 120 seconds for high loss rate runs
 
