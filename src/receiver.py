@@ -11,9 +11,10 @@ def calc_checksum(data):
     return sum(data) % 65536
 
 def make_ack(seq_num):
-    header_no_checksum = struct.pack("!BIH", seq_num % 256, 0, 0)
+    seq_byte = seq_num % 254
+    header_no_checksum = struct.pack("!BIH", seq_byte, 0, 0)
     checksum = calc_checksum(header_no_checksum)
-    return struct.pack("!BIH", seq_num % 256, 0, checksum)
+    return struct.pack("!BIH", seq_byte, 0, checksum)
 
 def is_corrupt(packet):
     if len(packet) < HEADER_SIZE:
@@ -57,7 +58,7 @@ def main():
     output_file = open(args.out, "wb")
     packets_received = 0
     expected_seq = 0
-    last_ack = make_ack(0)
+    last_ack = make_ack(253)
 
     while True:
         raw, sender_addr = sock.recvfrom(HEADER_SIZE + CHUNK_SIZE)
@@ -79,9 +80,9 @@ def main():
             if verbose:
                 print(f"Injected error into DATA packet seq_num={seq_num}")
 
-        if is_corrupt(raw) or seq_num != expected_seq % 256:
+        if is_corrupt(raw) or seq_num != expected_seq % 254:
             if verbose:
-                print(f"Bad packet, sending last ACK seq_num={expected_seq - 1}")
+                print(f"Bad packet, sending last ACK")
             sock.sendto(last_ack, sender_addr)
         else:
             _, length, _ = struct.unpack("!BIH", raw[:HEADER_SIZE])
