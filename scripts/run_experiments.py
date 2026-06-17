@@ -10,6 +10,7 @@ FILE = "data/480-360-sample.bmp"
 PORT = 9000
 OUT_FILE = "results/received_temp.bmp"
 CSV_OUT = "results/phase3_times.csv"
+TIMEOUT = 0.005
 
 def run_once(option, error_rate, seed):
     rate = error_rate / 100.0
@@ -47,7 +48,8 @@ def run_once(option, error_rate, seed):
         "--ack-error-rate", str(ack_err),
         "--ack-loss-rate", str(ack_loss),
         "--seed", str(seed),
-        "--log-level", "error"
+        "--log-level", "error",
+        "--timeout", str(TIMEOUT)
     ]
 
     receiver_proc = subprocess.Popen(receiver_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -58,7 +60,7 @@ def run_once(option, error_rate, seed):
     sender_out, _ = sender_proc.communicate()
     elapsed = time.time() - start
 
-    receiver_proc.wait(timeout=120)
+    receiver_proc.wait(timeout=300)
 
     for line in sender_out.decode().splitlines():
         if "Transfer done in" in line:
