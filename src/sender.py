@@ -3,7 +3,6 @@ import struct
 import argparse
 import random
 import time
-import threading
 
 CHUNK_SIZE = 1024
 HEADER_SIZE = 7
@@ -14,9 +13,10 @@ def calc_checksum(data):
     return sum(data) % 65536
 
 def make_packet(seq_num, data):
-    header_no_checksum = struct.pack("!BIH", seq_num % 256, len(data), 0)
+    seq_byte = seq_num % 254
+    header_no_checksum = struct.pack("!BIH", seq_byte, len(data), 0)
     checksum = calc_checksum(header_no_checksum + data)
-    header = struct.pack("!BIH", seq_num % 256, len(data), checksum)
+    header = struct.pack("!BIH", seq_byte, len(data), checksum)
     return header + data
 
 def is_corrupt(packet):
@@ -105,11 +105,11 @@ def main():
                 continue
 
             ack_num = get_seq_num(ack)
-            expected_ack = base % 256
+            expected_ack = base % 254
 
             if ack_num == expected_ack:
                 if verbose:
-                    print(f"Good ACK {ack_num}, base was {base}")
+                    print(f"Good ACK {ack_num}, advancing base from {base}")
                 base += 1
 
         except socket.timeout:
