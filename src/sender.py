@@ -101,16 +101,18 @@ def main():
 
             if is_corrupt(ack):
                 if verbose:
-                    print(f"Corrupt ACK received, ignoring")
+                    print(f"Corrupt ACK, ignoring")
                 continue
 
             ack_num = get_seq_num(ack)
-            expected_ack = base % 254
 
-            if ack_num == expected_ack:
-                if verbose:
-                    print(f"Good ACK {ack_num}, advancing base from {base}")
-                base += 1
+            # find which packet this ACK corresponds to
+            for i in range(base, nextseqnum):
+                if i % 254 == ack_num:
+                    if verbose:
+                        print(f"Good ACK {ack_num}, advancing base to {i + 1}")
+                    base = i + 1
+                    break
 
         except socket.timeout:
             if verbose:
