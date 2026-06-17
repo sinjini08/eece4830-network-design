@@ -5,13 +5,17 @@ import os
 import sys
 
 rates = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95]
+window_sizes = [1, 2, 5, 10, 20, 50]
 NUM_RUNS = 5
 FILE = "data/480-360-sample.bmp"
 PORT = 9000
 OUT_FILE = "results/received_temp.bmp"
-CSV_OUT = "results/phase3_times.csv"
+CSV_OUT = "results/phase4_times.csv"
+CSV_WINDOW = "results/phase4_window.csv"
+WINDOW_SIZE = 10
+TIMEOUT = 0.5
 
-def run_once(option, error_rate, seed):
+def run_once(option, error_rate, seed, window_size=WINDOW_SIZE):
     rate = error_rate / 100.0
 
     ack_err = 0.0
@@ -47,7 +51,9 @@ def run_once(option, error_rate, seed):
         "--ack-error-rate", str(ack_err),
         "--ack-loss-rate", str(ack_loss),
         "--seed", str(seed),
-        "--log-level", "error"
+        "--log-level", "error",
+        "--window-size", str(window_size),
+        "--timeout", str(TIMEOUT)
     ]
 
     receiver_proc = subprocess.Popen(receiver_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -58,7 +64,7 @@ def run_once(option, error_rate, seed):
     sender_out, _ = sender_proc.communicate()
     elapsed = time.time() - start
 
-    receiver_proc.wait(timeout=120)
+    receiver_proc.wait(timeout=300)
 
     for line in sender_out.decode().splitlines():
         if "Transfer done in" in line:
@@ -71,8 +77,8 @@ def run_once(option, error_rate, seed):
 
 os.makedirs("results", exist_ok=True)
 
+# Chart 1: completion time vs error/loss rate for all 5 options
 rows = []
-
 for option in [1, 2, 3, 4, 5]:
     print(f"\nRunning Option {option}...")
     for rate in rates:
@@ -94,4 +100,28 @@ with open(CSV_OUT, "w", newline="") as f:
     writer.writeheader()
     writer.writerows(rows)
 
-print(f"\nResults saved to {CSV_OUT}")
+print(f"\nChart 1 results saved to {CSV_OUT}")
+
+# Chart 2: completion time vs window size at 10% loss
+rows2 = []
+print(f"\nRunning Chart 2 window size sweep...")
+for ws in window_sizes:
+    run_times = []
+    for run in range(NUM_RUNS):
+        print(f"  window_size={ws}, run {run+1}/{NUM_RUNS}")
+        try:
+            t = run_once(5, 10, seed=run, window_size=ws)
+            run_times.append(t)
+        except Exception as e:
+            print(f"  Error: {e}")
+            run_times.append(0)
+    avg = sum(run_times) / len(run_times)
+    rows2.append({"window_size": ws, "avg_time": avg})
+    print(f"  avg time = {avg:.4f}s")
+
+with open(CSV_WINDOW, "w", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=["window_size", "avg_time"])
+    writer.writeheader()
+    writer.writerows(rows2)
+
+print(f"\nChart 2 results saved to {CSV_WINDOW}")
