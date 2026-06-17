@@ -21,7 +21,7 @@ Phase 3 builds on Phase 2 by upgrading from RDT 2.2 to RDT 3.0. The key new thin
 
 Screen recording showing all five scenarios and the plot.
 
-- **Private YouTube link:** (to be filled in at submission)
+- **Private YouTube link:** https://youtu.be/_TLSPXBfdpM
 
 ### 1.2 Required Demo Scenarios
 
@@ -202,8 +202,7 @@ Seed set with --seed for reproducibility.
 
 ### 6.4 Timeout Value
 
-Default timeout is 0.1 seconds. At high loss rates many timeouts will fire which makes transfers slow - this is expected behavior for a non-pipelined protocol.
-
+Default timeout is 0.1 seconds. The performance plot uses a log scale on the y-axis so all 5 options are clearly visible. At high loss rates many timeouts will fire which makes transfers slow - this is expected behavior for a non-pipelined protocol.
 ---
 
 ## 7) Experiments + Metrics Plan
