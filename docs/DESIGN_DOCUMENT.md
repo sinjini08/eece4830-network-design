@@ -1,17 +1,17 @@
-# Network Design Project – Phase Proposal & Design Document (Phase 3 of 5)
+# Network Design Project – Phase Proposal & Design Document (Phase 4 of 5)
 
 **Team Name:** Solo  
 **Members:** Sinjini Bhattacharjee, sinjini.bx@gmail.com  
 **GitHub Repo URL:** https://github.com/sinjini08/eece4830-network-design (username: sinjini08)  
-**Phase:** 3  
-**Submission Date:** June 2026  
-**Version:** v2 (updated from Phase 2)
+**Phase:** 4  
+**Submission Date:** 16 June 2026  
+**Version:** v3 (updated from Phase 3)
 
 ---
 
 ## 0) Executive Summary
 
-Phase 3 builds on Phase 2 by upgrading from RDT 2.2 to RDT 3.0. The key new thing in this phase is a countdown timer on the sender side. In Phase 2 we could handle bit errors but if a packet was just lost entirely, the sender would wait forever. Now when the sender sends a packet and the timer runs out before a valid ACK arrives, it retransmits automatically. I also added two new scenarios: Option 4 (ACK loss injected at the sender) and Option 5 (Data loss injected at the receiver). The receiver itself doesn't change much from Phase 2 — the RDT 3.0 receiver is the same as the RDT 2.2 receiver, except now there's an extra flag for data loss injection. The performance plot now has 5 lines instead of 3.
+Phase 4 builds on Phase 3 by upgrading from RDT 3.0 to Go-Back-N (GBN). The key new thing in this phase is pipelined sending — instead of waiting for each packet to be acknowledged before sending the next one, the sender now maintains a window of N unacknowledged packets in flight at once. This makes transfers significantly faster. The sender uses cumulative ACKs and on timeout retransmits all packets in the window starting from the oldest unacknowledged one. The receiver only accepts in-order packets and discards anything out of order. This phase also adds two new performance charts: one showing how completion time changes with window size, and one comparing all four phases.
 
 ---
 
@@ -19,25 +19,27 @@ Phase 3 builds on Phase 2 by upgrading from RDT 2.2 to RDT 3.0. The key new thin
 
 ### 1.1 Demo Deliverable
 
-Screen recording showing all five scenarios and the plot.
+Screen recording showing all five scenarios and the plots.
 
-- **Private YouTube link:** https://youtu.be/_TLSPXBfdpM
+- **Private YouTube link:** (to be filled in at submission)
 
 ### 1.2 Required Demo Scenarios
 
 | Scenario | What will be configured | Expected behavior | What we will see |
 |---|---|---|---|
 | Option 1 | No loss, no errors | Clean transfer, hashes match | Terminal showing transfer complete |
-| Option 2 | ACK errors at sender (--ack-error-rate 0.3) | Sender detects bad ACKs and retransmits | Terminal showing retransmissions |
-| Option 3 | Data errors at receiver (--data-error-rate 0.3) | Receiver detects corrupt data, sender retransmits | Terminal showing retransmissions |
-| Option 4 | ACK loss at sender (--ack-loss-rate 0.3) | Sender times out and retransmits | Terminal showing timeouts |
-| Option 5 | Data loss at receiver (--data-loss-rate 0.3) | Receiver silently drops, sender times out and retransmits | Terminal showing timeouts |
+| Option 2 | ACK errors at sender (--ack-error-rate 0.3) | Sender ignores corrupt ACKs, times out, resends window | Terminal showing retransmissions |
+| Option 3 | Data errors at receiver (--data-error-rate 0.3) | Receiver discards corrupt packets, sender resends window | Terminal showing retransmissions |
+| Option 4 | ACK loss at sender (--ack-loss-rate 0.3) | Sender times out and resends window | Terminal showing timeouts |
+| Option 5 | Data loss at receiver (--data-loss-rate 0.3) | Receiver drops packets, sender times out and resends window | Terminal showing timeouts |
 
 ### 1.3 Required Figures / Plots
 
-| Figure | X-axis | Y-axis | Sweep range | Output file |
-|---|---|---|---|---|
-| Completion time vs error/loss rate | Rate (%) | Time (seconds) | 0% to 95%, step 5% | results/phase3_plot.png |
+| Figure | X-axis | Y-axis | Output file |
+|---|---|---|---|
+| Chart 1: completion time vs error/loss rate | Rate (%) | Time (seconds) | results/phase4_chart1.png |
+| Chart 2: completion time vs window size | Window size | Time (seconds) | results/phase4_chart2.png |
+| Chart 3: phase comparison | Phase | Time (seconds) | results/phase4_chart3.png |
 
 ---
 
@@ -45,18 +47,19 @@ Screen recording showing all five scenarios and the plot.
 
 ### 2.1 Scope
 
-- **New stuff added:** countdown timer on sender, socket timeout, ACK loss injection (Option 4), data loss injection (Option 5), updated experiment and plot scripts for 5 options
-- **Same as Phase 2:** UDP sockets, 1024-byte packets, checksum, alternating seq bits, bit-error injection, file reassembly
-- **Out of scope:** pipelining (Phase 5)
+- **New stuff added:** GBN pipelining, window size N, sender buffer, cumulative ACKs, Go-Back-N retransmission, 3 performance charts
+- **Same as Phase 3:** UDP sockets, 1024-byte packets, checksum, bit-error injection, loss injection, file reassembly
+- **Out of scope:** Selective Repeat (Phase 5)
 
 ### 2.2 Acceptance Criteria
 
-- [ ] Sender has a countdown timer using socket.settimeout()
-- [ ] Sender retransmits when timer expires
-- [ ] Option 4 drops ACKs at the sender with --ack-loss-rate
-- [ ] Option 5 drops data packets at the receiver with --data-loss-rate
+- [ ] Sender maintains window of N unacknowledged packets
+- [ ] Sender retransmits entire window on timeout
+- [ ] Receiver discards out-of-order packets
 - [ ] All 5 options work and files match after transfer
-- [ ] Plot generated with 5 lines and correct axes
+- [ ] Chart 1 generated with 5 lines
+- [ ] Chart 2 generated with window sizes 1,2,5,10,20,50
+- [ ] Chart 3 generated comparing Phase 1,2,3,4
 
 ### 2.3 Work Breakdown
 
@@ -66,83 +69,61 @@ Solo - all work by Sinjini Bhattacharjee.
 
 ## 3) Architecture + State Diagrams
 
-### 3.1 RDT 3.0 Sender State Diagram
+### 3.1 GBN Sender Logic
 
-The RDT 3.0 sender adds a timer compared to RDT 2.2:
+Wait for call:
+  while nextseqnum < base + window_size:
+    send packet[nextseqnum]
+    nextseqnum++
+  wait for ACK (with timeout)
+  if timeout: nextseqnum = base, resend window
+  if corrupt ACK or dropped ACK: continue
+  if good ACK(n): base = n + 1
 
-Wait for call 0:
-  -> send pkt seq=0, start timer
-  -> Wait for ACK 0
+### 3.2 GBN Receiver Logic
 
-Wait for ACK 0:
-  if timeout: retransmit, restart timer
-  if ACK corrupt or wrong seq: retransmit, restart timer
-  if good ACK 0: stop timer, go to Wait for call 1
+Wait:
+  receive packet
+  if END: stop
+  if loss injection: drop, continue
+  if corrupt or wrong seq: send last ACK
+  if correct seq: write payload, send ACK, expected_seq++
 
-Wait for call 1:
-  -> send pkt seq=1, start timer
-  -> Wait for ACK 1
+### 3.3 Key Difference from Phase 3
 
-Wait for ACK 1:
-  if timeout: retransmit, restart timer
-  if ACK corrupt or wrong seq: retransmit, restart timer
-  if good ACK 1: stop timer, go to Wait for call 0
+In Phase 3, only one packet was in flight at a time. In Phase 4, up to N packets are in flight. On timeout, all packets from base to nextseqnum are retransmitted. This is the Go-Back-N behavior.
 
-### 3.2 RDT 3.0 Receiver State Diagram
+### 3.4 Sequence Numbers
 
-The receiver is the same as RDT 2.2 (per the spec):
+Sequence numbers cycle through 0-253. 255 is reserved for the END packet signal. This gives enough space for the window sizes used in this phase.
 
-Wait for 0:
-  if corrupt or seq!=0: send last ACK
-  if good seq=0: write data, send ACK(0), go to Wait for 1
+### 3.5 Component Responsibilities
 
-Wait for 1:
-  if corrupt or seq!=1: send last ACK
-  if good seq=1: write data, send ACK(1), go to Wait for 0
-
-For loss injection (Option 5): when a data packet is dropped at the receiver, no ACK is sent. The sender timer eventually expires and it retransmits.
-
-### 3.3 How the Timer Works
-
-I use Python's socket.settimeout() to set a timeout on the sender socket. When recvfrom() raises socket.timeout, the sender catches it and retransmits the same packet, then calls recvfrom() again with the same timeout. This continues until a valid ACK is received.
-
-### 3.4 Component Responsibilities
-
-- sender.py - sends RDT 3.0 packets, handles ACK errors and ACK loss, uses countdown timer, retransmits on timeout
-- receiver.py - same as Phase 2 receiver plus data loss injection flag
-- scripts/run_experiments.py - runs all 5 options at all rates, saves CSV
-- scripts/plot_results.py - reads CSV and generates 5-line plot
-
-### 3.5 Message Flow
-
-[file] -> sender -> UDP -> receiver -> [output file]
-       <- ACK (with possible injected errors or loss) <-
-
-For Option 4: ACK is received at sender but then dropped before processing (simulates ACK loss).
-For Option 5: Data packet is received at receiver but then dropped before processing (simulates data loss).
+- sender.py - GBN sender with window, pipelining, cumulative ACKs, timeout
+- receiver.py - GBN receiver, in-order delivery only
+- scripts/run_experiments.py - runs all 5 options and window size sweep
+- scripts/plot_results.py - generates all 3 charts
 
 ---
 
 ## 4) Packet Format
 
-Same as Phase 2 - no changes needed.
+Same as Phase 3 - no changes needed.
 
 ### 4.1 Packet Types
 
 - Data packet: header + file chunk
 - ACK packet: header with 0-byte payload
-- End packet: seq_bit=2, no payload
+- End packet: seq_num=255, no payload
 
 ### 4.2 Header Fields
 
 | Field | Size | Type | Description |
 |---|---:|---|---|
-| seq_bit | 1 byte | unsigned int | 0 or 1 (alternating), 2 = END |
+| seq_num | 1 byte | unsigned int | 0-253 (cycling), 255 = END |
 | length | 4 bytes | unsigned int | payload size in bytes |
 | checksum | 2 bytes | unsigned int | sum of all bytes mod 65536 |
 | payload | up to 1024 bytes | bytes | file chunk |
-
-Header is 7 bytes. Encoded with struct.pack("!BIH", seq_bit, length, checksum).
 
 ---
 
@@ -150,75 +131,91 @@ Header is 7 bytes. Encoded with struct.pack("!BIH", seq_bit, length, checksum).
 
 ### 5.1 Key Data Structures
 
-- Sender: list of chunks, current seq_bit (0 or 1), socket timeout set to 0.1 seconds
-- Receiver: expected_seq (starts at 0), last_ack (last ACK sent, used for retransmits)
+- Sender: list of all packets (pre-built), base pointer, nextseqnum pointer, window size N, socket timeout 0.5 seconds
+- Receiver: expected_seq counter, last_ack (last ACK sent)
 
 ### 5.2 Module Map
 
-src/sender.py              - RDT 3.0 sender with timeout
-src/receiver.py            - RDT 3.0 receiver (same as 2.2 + loss flag)
-scripts/run_experiments.py - runs all 5 options
-scripts/plot_results.py    - generates 5-line plot
-results/phase3_times.csv
-results/phase3_plot.png
+src/sender.py              - GBN sender
+src/receiver.py            - GBN receiver
+scripts/run_experiments.py - runs all 5 options + window sweep
+scripts/plot_results.py    - generates 3 charts
+results/phase4_times.csv
+results/phase4_window.csv
+results/phase_comparison.csv
+results/phase4_chart1.png
+results/phase4_chart2.png
+results/phase4_chart3.png
 
 ---
 
 ## 6) Protocol Logic
 
-### 6.1 Sender Behavior (Updated for Phase 3)
+### 6.1 Sender Behavior
 
-1. Read file, split into chunks
-2. seq_bit = 0
-3. sock.settimeout(0.1)
-4. For each chunk: send packet, wait for ACK
-5. If socket.timeout fires: retransmit
-6. If ack-loss-rate > 0 and random drop: raise timeout manually (Option 4)
-7. If ack-error-rate > 0 and random corrupt: corrupt ACK (Option 2)
-8. If ACK corrupt or wrong seq: retransmit
-9. If ACK good: flip seq_bit, move to next chunk
-10. Send END packet when done
+1. Read file, split into 1024-byte chunks
+2. Pre-build all packets with cycling sequence numbers (0-253)
+3. base = 0, nextseqnum = 0
+4. sock.settimeout(0.5)
+5. While base < total packets:
+   - Send all packets from nextseqnum up to base + window_size
+   - Wait for ACK
+   - If timeout: reset nextseqnum to base, resend window
+   - If ACK dropped (ack-loss-rate): continue
+   - If ACK corrupt (ack-error-rate): continue
+   - If good ACK: advance base by 1
+6. Send END packet
 
-### 6.2 Receiver Behavior (Updated for Phase 3)
+### 6.2 Receiver Behavior
 
 1. expected_seq = 0
 2. Receive packet
-3. If seq_bit == 2: END, stop
-4. If data-loss-rate > 0 and random drop: silently discard, continue (Option 5)
-5. If data-error-rate > 0 and random corrupt: corrupt packet (Option 3)
-6. If corrupt or wrong seq: send last ACK
-7. If good: write payload, send ACK(seq_bit), flip expected_seq
+3. If seq_num == 255: END, stop
+4. If data-loss-rate > 0 and random drop: discard (Option 5)
+5. If data-error-rate > 0 and random corrupt: corrupt (Option 3)
+6. If corrupt or seq != expected: send last ACK
+7. If good: write payload, send ACK, increment expected_seq
 
 ### 6.3 Error and Loss Injection
 
-| Option | Where injected | How |
+| Option | Where | How |
 |---|---|---|
-| Option 2 | Sender, on received ACK | Flip a random byte with probability ack-error-rate |
-| Option 3 | Receiver, on received data | Flip a random byte with probability data-error-rate |
-| Option 4 | Sender, on received ACK | Drop ACK entirely with probability ack-loss-rate |
-| Option 5 | Receiver, on received data | Drop packet entirely with probability data-loss-rate |
-
-Seed set with --seed for reproducibility.
+| Option 2 | Sender, on received ACK | Flip random byte with probability ack-error-rate |
+| Option 3 | Receiver, on received data | Flip random byte with probability data-error-rate |
+| Option 4 | Sender, on received ACK | Drop ACK with probability ack-loss-rate |
+| Option 5 | Receiver, on received data | Drop packet with probability data-loss-rate |
 
 ### 6.4 Timeout Value
 
-Default timeout is 0.1 seconds. The performance plot uses a log scale on the y-axis so all 5 options are clearly visible. At high loss rates many timeouts will fire which makes transfers slow - this is expected behavior for a non-pipelined protocol.
+Default timeout is 0.5 seconds. At high loss rates the window gets retransmitted repeatedly which makes transfers slow, but GBN is still faster than Phase 3 because multiple packets are sent before each timeout.
+
 ---
 
 ## 7) Experiments + Metrics Plan
 
-### 7.1 Measurement
+### 7.1 Chart 1 Measurement
 
-- Start timer just before first packet is sent
-- Stop timer after END packet is sent
-- 5 runs per rate per option, averaged
-- Logging disabled during timing runs (--log-level error)
-- Receiver timeout set to 120 seconds for high loss rate runs
+- 5 options x 20 rates x 5 runs each
+- Logging disabled (--log-level error)
+- Window size fixed at 10
 
-### 7.2 Output
+### 7.2 Chart 2 Measurement
 
-- CSV: results/phase3_times.csv (columns: option, rate, avg_time)
-- Plot: results/phase3_plot.png with 5 lines
+- Fixed 10% data loss rate (Option 5)
+- Window sizes: 1, 2, 5, 10, 20, 50
+- 5 runs per window size, averaged
+
+### 7.3 Chart 3 Measurement
+
+- Fixed 10% loss/error rate
+- One bar per phase (Phase 1, 2, 3, 4)
+- Uses baseline transfer times from each phase
+
+### 7.4 Output Files
+
+- results/phase4_times.csv
+- results/phase4_window.csv
+- results/phase_comparison.csv
 
 ---
 
@@ -226,20 +223,20 @@ Default timeout is 0.1 seconds. The performance plot uses a log scale on the y-a
 
 ### 8.1 Edge Cases
 
-| Edge case | Why it matters | Expected behavior |
-|---|---|---|
-| ACK corrupt on very first packet | No previous ACK to fall back on | Retransmit seq=0 |
-| 95% loss rate | Almost every packet needs timeout + retransmit | Transfer completes but very slowly |
-| Data loss on last packet | File might be missing last chunk | Sender retransmits on timeout |
-| ACK loss on first packet | Sender never sees ACK | Timer fires, retransmit |
+| Edge case | Expected behavior |
+|---|---|
+| Window larger than remaining packets | Sender only sends remaining packets |
+| Sequence number wraparound at 254 | Cycles back to 0 correctly |
+| Timeout with large window | All packets from base retransmitted |
+| 95% loss rate | Transfer completes slowly but correctly |
 
 ### 8.2 Tests
 
-- Option 1: md5 hash check to confirm byte-for-byte match
-- Option 2 at 30% error rate: verify file still correct after transfer
-- Option 3 at 30% error rate: verify file still correct after transfer
-- Option 4 at 30% loss rate: verify file still correct after transfer
-- Option 5 at 30% loss rate: verify file still correct after transfer
+- Option 1: md5 hash check
+- Option 2 at 30%: file still correct
+- Option 3 at 30%: file still correct
+- Option 4 at 30%: file still correct
+- Option 5 at 30%: file still correct
 
 ---
 
@@ -258,27 +255,47 @@ scripts/
     run_experiments.py
     plot_results.py
 results/
-    phase3_times.csv
-    phase3_plot.png
+    phase4_times.csv
+    phase4_window.csv
+    phase_comparison.csv
+    phase4_chart1.png
+    phase4_chart2.png
+    phase4_chart3.png
 contribution.txt
 README.md
 
 ---
 
-## 10) Team Plan
+## 10) Observations and Conclusions
 
-### 10.1 Task Ownership
+### 10.1 Optimal Window Size
+
+Based on Chart 2, performance improves as window size increases up to a point, then levels off. A window size of 10-20 appears optimal for this file size and network conditions. Very large windows like 50 do not improve much because the bottleneck becomes timeout and retransmission overhead.
+
+### 10.2 Optimal Timeout Value
+
+A timeout of 0.5 seconds works well on localhost. Too small causes unnecessary retransmissions. Too large causes slow recovery from actual loss.
+
+### 10.3 Phase Comparison
+
+GBN (Phase 4) is significantly faster than RDT 3.0 (Phase 3) due to pipelining. Phase 1 and Phase 2 are fast but do not handle loss. Phase 4 handles both loss and errors while maintaining good throughput.
+
+---
+
+## 11) Team Plan
+
+### 11.1 Task Ownership
 
 | Task | Owner | Done when |
 |---|---|---|
-| sender.py RDT 3.0 (timer + loss) | Sinjini Bhattacharjee | Options 4 and 5 work |
-| receiver.py (loss injection) | Sinjini Bhattacharjee | Option 5 works |
-| Experiment + plot scripts | Sinjini Bhattacharjee | Plot generated with 5 lines |
+| sender.py GBN | Sinjini Bhattacharjee | All 5 options work |
+| receiver.py GBN | Sinjini Bhattacharjee | In-order delivery correct |
+| Experiment + plot scripts | Sinjini Bhattacharjee | All 3 charts generated |
 | README + design doc | Sinjini Bhattacharjee | TA can run everything |
 
-### 10.2 Milestones
+### 11.2 Milestones
 
-- Milestone 1: RDT 3.0 working for Option 1 (timer added but no errors/loss)
-- Milestone 2: Options 2 and 3 working (bit errors, same as Phase 2)
-- Milestone 3: Options 4 and 5 working (packet loss + timer)
-- Milestone 4: Plots generated, everything submitted
+- Milestone 1: GBN working for Option 1
+- Milestone 2: Options 2, 3, 4, 5 working
+- Milestone 3: All 3 charts generated
+- Milestone 4: Everything submitted
