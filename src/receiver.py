@@ -10,21 +10,21 @@ HEADER_SIZE = 7
 def calc_checksum(data):
     return sum(data) % 65536
 
-def make_ack(seq_bit):
-    header_no_checksum = struct.pack("!BIH", seq_bit, 0, 0)
+def make_ack(seq_num):
+    header_no_checksum = struct.pack("!BIH", seq_num % 256, 0, 0)
     checksum = calc_checksum(header_no_checksum)
-    return struct.pack("!BIH", seq_bit, 0, checksum)
+    return struct.pack("!BIH", seq_num % 256, 0, checksum)
 
 def is_corrupt(packet):
     if len(packet) < HEADER_SIZE:
         return True
-    seq_bit, length, received_checksum = struct.unpack("!BIH", packet[:HEADER_SIZE])
+    seq_num, length, received_checksum = struct.unpack("!BIH", packet[:HEADER_SIZE])
     payload = packet[HEADER_SIZE:HEADER_SIZE + length]
-    test_header = struct.pack("!BIH", seq_bit, length, 0)
+    test_header = struct.pack("!BIH", seq_num, length, 0)
     expected = calc_checksum(test_header + payload)
     return received_checksum != expected
 
-def get_seq_bit(packet):
+def get_seq_num(packet):
     return struct.unpack("!B", packet[:1])[0]
 
 def corrupt_packet(packet):
@@ -57,51 +57,46 @@ def main():
     output_file = open(args.out, "wb")
     packets_received = 0
     expected_seq = 0
-    last_ack = None
+    last_ack = make_ack(0)
 
     while True:
         raw, sender_addr = sock.recvfrom(HEADER_SIZE + CHUNK_SIZE)
 
-        seq_bit = get_seq_bit(raw)
+        seq_num = get_seq_num(raw)
 
-        if seq_bit == 2:
+        if seq_num == 255:
             if verbose:
                 print("Received END packet. Done.")
             break
 
         if args.data_loss_rate > 0 and random.random() < args.data_loss_rate:
             if verbose:
-                print(f"Dropped DATA packet seq_bit={seq_bit}")
+                print(f"Dropped DATA packet seq_num={seq_num}")
             continue
 
         if args.data_error_rate > 0 and random.random() < args.data_error_rate:
             raw = corrupt_packet(raw)
             if verbose:
-                print(f"Injected error into DATA packet seq_bit={seq_bit}")
+                print(f"Injected error into DATA packet seq_num={seq_num}")
 
-        if is_corrupt(raw) or seq_bit != expected_seq:
+        if is_corrupt(raw) or seq_num != expected_seq % 256:
             if verbose:
-                print(f"Bad packet (corrupt or wrong seq), sending last ACK")
-            if last_ack is not None:
-                sock.sendto(last_ack, sender_addr)
-            else:
-                resend_bit = 1 - expected_seq
-                sock.sendto(make_ack(resend_bit), sender_addr)
+                print(f"Bad packet, sending last ACK seq_num={expected_seq - 1}")
+            sock.sendto(last_ack, sender_addr)
         else:
             _, length, _ = struct.unpack("!BIH", raw[:HEADER_SIZE])
             payload = raw[HEADER_SIZE:HEADER_SIZE + length]
             output_file.write(payload)
             packets_received += 1
             if verbose:
-                print(f"Received packet seq_bit={seq_bit} ({length} bytes)")
+                print(f"Received packet seq_num={seq_num} ({length} bytes)")
 
-            ack = make_ack(seq_bit)
-            last_ack = ack
-            sock.sendto(ack, sender_addr)
+            last_ack = make_ack(seq_num)
+            sock.sendto(last_ack, sender_addr)
             if verbose:
-                print(f"Sent ACK seq_bit={seq_bit}")
+                print(f"Sent ACK seq_num={seq_num}")
 
-            expected_seq = 1 - expected_seq
+            expected_seq += 1
 
     output_file.close()
     sock.close()
