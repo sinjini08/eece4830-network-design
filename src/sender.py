@@ -3,30 +3,32 @@ import struct
 import argparse
 import random
 import time
+import threading
 
 CHUNK_SIZE = 1024
 HEADER_SIZE = 7
-TIMEOUT = 0.1
+TIMEOUT = 0.5
+WINDOW_SIZE = 10
 
 def calc_checksum(data):
     return sum(data) % 65536
 
-def make_packet(seq_bit, data):
-    header_no_checksum = struct.pack("!BIH", seq_bit, len(data), 0)
+def make_packet(seq_num, data):
+    header_no_checksum = struct.pack("!BIH", seq_num % 256, len(data), 0)
     checksum = calc_checksum(header_no_checksum + data)
-    header = struct.pack("!BIH", seq_bit, len(data), checksum)
+    header = struct.pack("!BIH", seq_num % 256, len(data), checksum)
     return header + data
 
 def is_corrupt(packet):
     if len(packet) < HEADER_SIZE:
         return True
-    seq_bit, length, received_checksum = struct.unpack("!BIH", packet[:HEADER_SIZE])
+    seq_num, length, received_checksum = struct.unpack("!BIH", packet[:HEADER_SIZE])
     payload = packet[HEADER_SIZE:HEADER_SIZE + length]
-    test_header = struct.pack("!BIH", seq_bit, length, 0)
+    test_header = struct.pack("!BIH", seq_num, length, 0)
     expected = calc_checksum(test_header + payload)
     return received_checksum != expected
 
-def get_seq_bit(packet):
+def get_seq_num(packet):
     return struct.unpack("!B", packet[:1])[0]
 
 def corrupt_packet(packet):
@@ -45,6 +47,7 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--log-level", type=str, default="info")
     parser.add_argument("--timeout", type=float, default=TIMEOUT)
+    parser.add_argument("--window-size", type=int, default=WINDOW_SIZE)
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -62,53 +65,59 @@ def main():
     if verbose:
         print("File size:", len(file_data), "bytes")
         print("Total packets:", len(chunks))
+        print("Window size:", args.window_size)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(args.timeout)
     receiver = (args.host, args.port)
 
+    base = 0
+    nextseqnum = 0
+    packets = []
+    for i in range(len(chunks)):
+        packets.append(make_packet(i, chunks[i]))
+
     start_time = time.time()
 
-    seq_bit = 0
-    i = 0
-    while i < len(chunks):
-        packet = make_packet(seq_bit, chunks[i])
-        sock.sendto(packet, receiver)
-        if verbose:
-            print(f"Sent packet {i} seq_bit={seq_bit}")
+    while base < len(chunks):
+        while nextseqnum < base + args.window_size and nextseqnum < len(chunks):
+            sock.sendto(packets[nextseqnum], receiver)
+            if verbose:
+                print(f"Sent packet {nextseqnum}")
+            nextseqnum += 1
 
-        while True:
-            try:
-                ack, _ = sock.recvfrom(16)
+        try:
+            ack, _ = sock.recvfrom(16)
 
-                if args.ack_loss_rate > 0 and random.random() < args.ack_loss_rate:
-                    if verbose:
-                        print(f"Dropped ACK for packet {i}")
-                    raise socket.timeout
-
-                if args.ack_error_rate > 0 and random.random() < args.ack_error_rate:
-                    ack = corrupt_packet(ack)
-                    if verbose:
-                        print(f"Injected error into ACK for packet {i}")
-
-                if is_corrupt(ack) or get_seq_bit(ack) != seq_bit:
-                    if verbose:
-                        print(f"Bad ACK for packet {i}, retransmitting")
-                    sock.sendto(packet, receiver)
-                else:
-                    if verbose:
-                        print(f"Good ACK for packet {i}")
-                    break
-
-            except socket.timeout:
+            if args.ack_loss_rate > 0 and random.random() < args.ack_loss_rate:
                 if verbose:
-                    print(f"Timeout waiting for ACK for packet {i}, retransmitting")
-                sock.sendto(packet, receiver)
+                    print(f"Dropped ACK")
+                continue
 
-        seq_bit = 1 - seq_bit
-        i += 1
+            if args.ack_error_rate > 0 and random.random() < args.ack_error_rate:
+                ack = corrupt_packet(ack)
+                if verbose:
+                    print(f"Injected error into ACK")
 
-    end_pkt = struct.pack("!BIH", 2, 0, 0)
+            if is_corrupt(ack):
+                if verbose:
+                    print(f"Corrupt ACK received, ignoring")
+                continue
+
+            ack_num = get_seq_num(ack)
+            expected_ack = base % 256
+
+            if ack_num == expected_ack:
+                if verbose:
+                    print(f"Good ACK {ack_num}, base was {base}")
+                base += 1
+
+        except socket.timeout:
+            if verbose:
+                print(f"Timeout, resending from base={base}")
+            nextseqnum = base
+
+    end_pkt = struct.pack("!BIH", 255, 0, 0)
     sock.sendto(end_pkt, receiver)
 
     completion_time = time.time() - start_time
