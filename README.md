@@ -10,7 +10,7 @@ This repo has my implementation for the network design project. Phase 1 covers a
 
 ## Demo Video
 - Phase 1: https://youtu.be/8d3UtI3cKqU
-- Phase 2: (submitted via Canvas)
+- Phase 2: https://youtu.be/JzjmPTGw_FM
 - Phase 3: https://youtu.be/_TLSPXBfdpM
 - Phase 4: (to be submitted via Canvas)
 
