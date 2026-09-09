@@ -188,7 +188,25 @@ python scripts/plot_results.py
 This generates results/phase4_chart1.png, results/phase4_chart2.png, results/phase4_chart3.png
 
 ---
+## Results
 
+![GBN completion time vs error and loss rate](results/phase4_chart1.png)
+
+Data path impairments cost roughly three orders of magnitude more than ACK path
+impairments at the same rate. At a 60% rate, data loss and data bit errors push
+completion time to about 6 seconds, while ACK loss and ACK bit errors stay under
+0.05 seconds.
+
+Go-Back-N uses cumulative acknowledgments, so a lost ACK is usually covered by the
+next one to arrive. A corrupted or lost data packet has no such fallback: the
+receiver discards everything after it and the sender retransmits the full window.
+
+Data bit errors and data loss track almost identically, since a failed checksum and
+a missing packet are equivalent from the receiver's perspective.
+
+![Window size effect](results/phase4_chart2.png)
+
+![Phase comparison](results/phase4_chart3.png)
 ## Known Limitations
 - GBN handles bit errors and packet loss with pipelining
 - At very high loss rates, the entire window gets retransmitted repeatedly which is slow
