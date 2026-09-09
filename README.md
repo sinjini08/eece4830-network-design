@@ -1,4 +1,5 @@
-# EECE 4830 Network Design Project
+# Reliable Transport over UDP
+Built for EECE 4830 Network Design at UMass Lowell
 
 ## Overview
 This repo has my implementation for the network design project. Phase 1 covers a basic UDP echo program and file transfer using RDT 1.0. Phase 2 upgrades to RDT 2.2 with checksums, sequence numbers, and retransmission over an unreliable channel with bit errors. Phase 3 upgrades to RDT 3.0 by adding a countdown timer to handle packet loss. Phase 4 upgrades to Go-Back-N (GBN) with pipelined sending and a sliding window.
