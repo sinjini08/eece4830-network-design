@@ -2,7 +2,14 @@
 Built for EECE 4830 Network Design at UMass Lowell
 
 ## Overview
-This repo has my implementation for the network design project. Phase 1 covers a basic UDP echo program and file transfer using RDT 1.0. Phase 2 upgrades to RDT 2.2 with checksums, sequence numbers, and retransmission over an unreliable channel with bit errors. Phase 3 upgrades to RDT 3.0 by adding a countdown timer to handle packet loss. Phase 4 upgrades to Go-Back-N (GBN) with pipelined sending and a sliding window.
+UDP sends data fast but makes no promises: packets can arrive corrupted, arrive out of order, or never arrive at all, and the sender is never told. This project builds reliability on top of it from scratch, one mechanism at a time.
+
+Phase 1 (RDT 1.0) assumes a perfect channel and does a plain file transfer.
+Phase 2 (RDT 2.2) adds checksums to catch corrupted packets and sequence numbers so the receiver can tell a retransmission from new data.
+Phase 3 (RDT 3.0) adds a countdown timer, so the sender resends when an acknowledgment never comes back.
+Phase 4 (Go-Back-N) sends multiple packets at once using a sliding window instead of waiting for each acknowledgment, which is far faster on a clean channel.
+
+Together these are the same problems TCP solves, implemented by hand to see how each mechanism earns its place.
 
 ## Team
 | Name | Email |
